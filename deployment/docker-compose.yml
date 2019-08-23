@@ -1,0 +1,53 @@
+version: '3'
+
+services:
+  db:
+    restart: always
+    image: postgres:10.5
+    volumes:
+      - db_data:/var/lib/postgresql/data/
+      - ../db/scripts/init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh
+      - ../db/tmp-data:/tmp/data:cached
+      - ../db/backups:/backups:cached
+      - ../db/scripts:/scripts:cached
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PW}
+      - DEV_DB=${DEV_DB}
+      - DEV_DB_USER=${DEV_DB_USER}
+      - DEV_DB_PW=${DEV_DB_PW}
+      - DEV=1
+
+  dev-api:
+    restart: always
+    image: dev-api
+    depends_on:
+      - db
+    build: ../api-server/my-api
+    volumes:
+      - ../api-server/my-api:/code:cached
+    environment:
+      - DJANGO_SECRET_KEY=${DEV_SECRET_KEY}
+      - DJANGO_CONFIGURATION=Local
+      - DJANGO_DB=${DEV_DB}
+      - DJANGO_DB_USER=${DEV_DB_USER}
+      - DJANGO_DB_PASSWORD=${DEV_DB_PW}
+      - DJANGO_DB_URL=${DEV_DB_URL}
+    command: >
+      bash -c "python wait_for_postgres.py &&
+               ./manage.py migrate &&
+               ./manage.py runserver 0.0.0.0:8000"
+    ports:
+      - '8000:8000'
+
+  dev-client:
+    image: dev-client
+    build: ../client/my-app
+    volumes:
+      - ../client/my-app:/code:cached
+    command: >
+      bash -c "npm install; ng serve --host 0.0.0.0 --disable-host-check"
+    ports:
+      - '8080:4200'
+
+volumes:
+  db_data:
